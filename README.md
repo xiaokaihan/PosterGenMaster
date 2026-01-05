@@ -184,6 +184,24 @@ poster_image = drawer.draw(data_row, config)
 5. **文字显示**: 所有文字默认使用粗体显示，城市和姓名会显示在同一行
 6. **布局说明**: 金额和单位会智能对齐，单位显示在金额的右下角位置
 
+## 🚀 部署
+
+本项目支持多种部署方式，详细部署指南请参考 [DEPLOY.md](DEPLOY.md)。
+
+### 快速部署选项
+
+- **Streamlit Cloud**（推荐）: 免费，自动部署，适合快速上线
+- **Railway**: 免费额度充足，支持 Docker
+- **Docker**: 可部署到任何支持 Docker 的平台
+- **EdgeOne Pages**: 主要用于静态网站，Streamlit 应用建议使用其他方案
+
+### 一键部署到 Streamlit Cloud
+
+1. Fork 本仓库到你的 GitHub
+2. 访问 [Streamlit Cloud](https://streamlit.io/cloud)
+3. 使用 GitHub 登录并选择本仓库
+4. 点击 Deploy，等待部署完成
+
 ## 📄 许可证
 
 本项目采用 MIT 许可证。
