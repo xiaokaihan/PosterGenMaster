@@ -3,3 +3,5 @@ pillow>=10.0.0
 pandas>=2.0.0
 openpyxl>=3.1.0
 
+# 桌面应用打包依赖（可选）
+# pyinstaller>=5.13.0  # 取消注释以安装打包工具

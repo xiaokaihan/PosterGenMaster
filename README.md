@@ -188,19 +188,36 @@ poster_image = drawer.draw(data_row, config)
 
 本项目支持多种部署方式，详细部署指南请参考 [DEPLOY.md](DEPLOY.md)。
 
+### ⚠️ 中国大陆用户重要提示
+
+**Streamlit Cloud 在中国大陆无法正常访问**，建议使用以下方案：
+
+- **腾讯云轻量应用服务器 + EdgeOne CDN**（最推荐，24-50 元/月）
+- **阿里云 ECS**（稳定可靠）
+- **华为云 ECS**（企业级）
+
+详细部署步骤请参考 [DEPLOY.md](DEPLOY.md) 中的"中国大陆用户推荐方案"章节。
+
 ### 快速部署选项
 
-- **Streamlit Cloud**（推荐）: 免费，自动部署，适合快速上线
+#### 海外用户
+- **Streamlit Cloud**: 免费，自动部署，适合快速上线
 - **Railway**: 免费额度充足，支持 Docker
 - **Docker**: 可部署到任何支持 Docker 的平台
-- **EdgeOne Pages**: 主要用于静态网站，Streamlit 应用建议使用其他方案
 
-### 一键部署到 Streamlit Cloud
+#### 中国大陆用户
+- **腾讯云轻量服务器 + EdgeOne CDN**（最推荐）
+- **阿里云 ECS + CDN**
+- **华为云 ECS**
+
+### 一键部署到 Streamlit Cloud（仅限海外用户）
 
 1. Fork 本仓库到你的 GitHub
 2. 访问 [Streamlit Cloud](https://streamlit.io/cloud)
 3. 使用 GitHub 登录并选择本仓库
 4. 点击 Deploy，等待部署完成
+
+⚠️ **注意**：中国大陆用户无法访问 Streamlit Cloud，请使用国内云服务器方案。
 
 ## 📄 许可证
 

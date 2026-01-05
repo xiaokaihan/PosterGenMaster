@@ -4,10 +4,274 @@
 
 ## 📋 目录
 
+- [中国大陆用户推荐方案](#中国大陆用户推荐方案)
 - [EdgeOne Pages 部署](#edgeone-pages-部署)
-- [Streamlit Cloud 部署（推荐）](#streamlit-cloud-部署推荐)
+- [Streamlit Cloud 部署](#streamlit-cloud-部署)
 - [Docker 部署](#docker-部署)
 - [其他部署方案](#其他部署方案)
+
+---
+
+## ⚠️ 重要提示：中国大陆用户
+
+**Streamlit Cloud 在中国大陆访问受限**：
+- Streamlit Cloud 依赖 AWS 和 Google Cloud，在中国大陆访问可能不稳定或无法访问
+- 注册时国家列表中不包含中国
+- 建议中国大陆用户使用以下方案：
+
+### 推荐方案（按优先级）
+
+1. **腾讯云轻量应用服务器 + EdgeOne CDN**（最推荐）
+   - 国内访问速度快
+   - 可使用 EdgeOne CDN 加速
+   - 成本低（轻量服务器约 24-50 元/月）
+
+2. **阿里云 ECS + CDN**
+   - 稳定可靠
+   - 国内访问速度快
+
+3. **华为云 ECS**
+   - 国内访问稳定
+
+4. **Railway / Render**（需要科学上网）
+   - 免费额度充足
+   - 但访问需要代理
+
+---
+
+## 中国大陆用户推荐方案
+
+### 方案一：腾讯云轻量应用服务器 + EdgeOne CDN（最推荐）
+
+这是最适合中国大陆用户的部署方案，访问速度快且稳定。
+
+#### 1. 购买腾讯云轻量应用服务器
+
+1. **访问 [腾讯云轻量应用服务器](https://cloud.tencent.com/product/lighthouse)**
+2. **选择配置**：
+   - 地域：选择离用户最近的地域（如：北京、上海、广州）
+   - 镜像：Ubuntu 22.04 LTS 或 CentOS 7.9
+   - 套餐：2核2G 或更高（约 24-50 元/月）
+3. **购买并获取服务器 IP 和 root 密码**
+
+#### 2. 连接服务器并安装环境
+
+```bash
+# SSH 连接到服务器
+ssh root@你的服务器IP
+
+# 更新系统
+sudo apt update && sudo apt upgrade -y
+
+# 安装 Python 3.10+
+sudo apt install python3 python3-pip python3-venv -y
+
+# 安装 Git
+sudo apt install git -y
+
+# 安装系统依赖（Pillow 需要）
+sudo apt install libgl1-mesa-glx libglib2.0-0 -y
+```
+
+#### 3. 部署应用
+
+```bash
+# 克隆项目
+cd /opt
+git clone https://github.com/xiaokaihan/PosterGenMaster.git
+cd PosterGenMaster
+
+# 创建虚拟环境
+python3 -m venv venv
+source venv/bin/activate
+
+# 安装依赖
+pip install -r requirements.txt
+
+# 测试运行（确保 assets 目录下有必需文件）
+streamlit run app.py --server.port=8501 --server.address=0.0.0.0
+```
+
+#### 4. 配置 systemd 服务（开机自启）
+
+创建服务文件：
+
+```bash
+sudo nano /etc/systemd/system/postergenmaster.service
+```
+
+添加以下内容：
+
+```ini
+[Unit]
+Description=PosterGenMaster Streamlit App
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/PosterGenMaster
+Environment="PATH=/opt/PosterGenMaster/venv/bin"
+ExecStart=/opt/PosterGenMaster/venv/bin/streamlit run app.py --server.port=8501 --server.address=0.0.0.0
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+启动服务：
+
+```bash
+# 重载 systemd
+sudo systemctl daemon-reload
+
+# 启动服务
+sudo systemctl start postergenmaster
+
+# 设置开机自启
+sudo systemctl enable postergenmaster
+
+# 查看状态
+sudo systemctl status postergenmaster
+```
+
+#### 5. 配置防火墙
+
+```bash
+# 开放 8501 端口
+sudo ufw allow 8501/tcp
+# 或使用腾讯云控制台的防火墙规则
+```
+
+#### 6. 配置 EdgeOne CDN 加速（可选但推荐）
+
+1. **登录 [EdgeOne 控制台](https://console.cloud.tencent.com/edgeone)**
+2. **添加站点**：
+   - 站点类型：选择"自有源站"
+   - 源站地址：填写你的服务器 IP 或域名
+   - 端口：8501
+3. **配置加速域名**：
+   - 添加你的域名（需要先备案）
+   - 或使用 EdgeOne 提供的测试域名
+4. **配置完成**，通过 CDN 域名访问应用
+
+#### 7. 使用 Nginx 反向代理（推荐，更专业）
+
+安装 Nginx：
+
+```bash
+sudo apt install nginx -y
+```
+
+配置 Nginx：
+
+```bash
+sudo nano /etc/nginx/sites-available/postergenmaster
+```
+
+添加配置：
+
+```nginx
+server {
+    listen 80;
+    server_name 你的域名或IP;
+
+    location / {
+        proxy_pass http://127.0.0.1:8501;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400;
+    }
+}
+```
+
+启用配置：
+
+```bash
+sudo ln -s /etc/nginx/sites-available/postergenmaster /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl restart nginx
+```
+
+现在可以通过 `http://你的域名或IP` 访问应用。
+
+### 方案二：阿里云 ECS 部署
+
+步骤与腾讯云类似：
+
+1. **购买阿里云 ECS**
+2. **配置安全组**，开放 8501 端口
+3. **按照上述步骤部署应用**
+4. **（可选）配置阿里云 CDN 加速**
+
+### 方案三：使用 Docker 部署到国内云平台
+
+如果使用 Docker，可以：
+
+1. **构建镜像**：
+   ```bash
+   docker build -t postergenmaster:latest .
+   ```
+
+2. **运行容器**：
+   ```bash
+   docker run -d -p 8501:8501 --name postergenmaster postergenmaster:latest
+   ```
+
+3. **部署到**：
+   - 腾讯云容器服务 TKE
+   - 阿里云容器服务 ACK
+   - 华为云 CCE
+
+---
+
+## 成本对比（中国大陆）
+
+| 方案 | 月成本 | 访问速度 | 稳定性 |
+|------|--------|----------|--------|
+| **腾讯云轻量服务器** | 24-50 元 | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **阿里云 ECS** | 50-100 元 | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **华为云 ECS** | 50-100 元 | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **Streamlit Cloud** | 免费 | ❌ 无法访问 | ❌ 无法访问 |
+| **Railway** | 免费/付费 | ⭐⭐ 需代理 | ⭐⭐⭐ |
+
+---
+
+## 后续维护
+
+### 更新应用
+
+```bash
+cd /opt/PosterGenMaster
+git pull origin main
+source venv/bin/activate
+pip install -r requirements.txt
+sudo systemctl restart postergenmaster
+```
+
+### 查看日志
+
+```bash
+# 查看服务日志
+sudo journalctl -u postergenmaster -f
+
+# 查看 Streamlit 日志
+tail -f /opt/PosterGenMaster/.streamlit/logs/*.log
+```
+
+### 备份
+
+定期备份 `assets/` 目录和配置文件：
+
+```bash
+tar -czf backup-$(date +%Y%m%d).tar.gz assets/ app.py core/ requirements.txt
+```
 
 ---
 
@@ -62,9 +326,11 @@
 
 ---
 
-## Streamlit Cloud 部署（推荐）
+## Streamlit Cloud 部署
 
-Streamlit Cloud 是 Streamlit 官方提供的免费部署平台，最适合部署 Streamlit 应用。
+⚠️ **注意**：Streamlit Cloud 在中国大陆访问受限，建议中国大陆用户使用 [腾讯云轻量服务器方案](#方案一腾讯云轻量应用服务器--edgeone-cdn最推荐)。
+
+Streamlit Cloud 是 Streamlit 官方提供的免费部署平台，适合海外用户或能访问的用户。
 
 ### 部署步骤
 
@@ -228,12 +494,22 @@ docker run -p 8501:8501 postergenmaster:latest
 
 ## 推荐方案对比
 
+### 海外用户
+
 | 方案 | 难度 | 成本 | 适用场景 |
 |------|------|------|----------|
 | **Streamlit Cloud** | ⭐ 简单 | 免费 | 快速部署，个人/小团队项目 |
 | **Railway** | ⭐⭐ 中等 | 免费/付费 | 需要更多控制权 |
 | **Docker + 云平台** | ⭐⭐⭐ 较难 | 免费/付费 | 企业级部署，需要定制化 |
-| **轻量服务器** | ⭐⭐⭐ 较难 | 付费 | 国内访问，需要完全控制 |
+
+### 中国大陆用户
+
+| 方案 | 难度 | 成本 | 适用场景 |
+|------|------|------|----------|
+| **腾讯云轻量服务器** | ⭐⭐⭐ 较难 | 24-50 元/月 | 国内访问，稳定快速（最推荐） |
+| **阿里云 ECS** | ⭐⭐⭐ 较难 | 50-100 元/月 | 企业级，稳定可靠 |
+| **华为云 ECS** | ⭐⭐⭐ 较难 | 50-100 元/月 | 企业级，稳定可靠 |
+| **Docker + 国内云平台** | ⭐⭐⭐⭐ 较难 | 按需付费 | 容器化部署，适合大规模应用 |
 
 ---
 
