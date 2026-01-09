@@ -102,7 +102,7 @@ with tab1:
     uploaded_file = st.file_uploader(
         "请上传 CSV 文件 (.csv)",
         type=['csv'],
-        help="CSV 文件应包含以下列：分公司、投保人、预收规保、缴费期间"
+        help="CSV 文件应包含以下列：分公司、业务员姓名、预收规保、缴费期间"
     )
     
     if uploaded_file is not None:
@@ -179,12 +179,12 @@ with tab1:
             st.info(f"📋 成功读取文件，共 {len(df.columns)} 列，{len(df)} 行数据。列名: {', '.join(df.columns.tolist()[:10])}{'...' if len(df.columns) > 10 else ''}")
             
             # 检查必需的列
-            required_columns = ['分公司', '投保人', '预收规保', '缴费期间']
+            required_columns = ['分公司', '业务员姓名', '预收规保', '缴费期间']
             missing_columns = [col for col in required_columns if col not in df.columns]
             
             if missing_columns:
                 st.error(f"❌ CSV 文件缺少必需的列: {', '.join(missing_columns)}")
-                st.info("请确保 CSV 文件包含以下列：分公司、投保人、预收规保、缴费期间")
+                st.info("请确保 CSV 文件包含以下列：分公司、业务员姓名、预收规保、缴费期间")
                 df = None
             else:
                 # 数据转换和过滤
@@ -208,7 +208,7 @@ with tab1:
                     
                     # 3. 字段映射：转换为绘制器需要的格式
                     df['城市'] = df['分公司'].astype(str)
-                    df['姓名'] = df['投保人'].astype(str)
+                    df['姓名'] = df['业务员姓名'].astype(str)
                     df['金额'] = df['预收规保_万元'].apply(lambda x: str(int(x)))
                     df['单位'] = '万'
         
@@ -448,7 +448,7 @@ st.markdown("""
 1. **准备文件**：
    - 确保在 `assets/` 目录下放置 `template.jpg` 底图文件
    - 确保在 `assets/` 目录下放置 `NotoSansSC-Regular.ttf` 和 `NotoSansSC-Bold.ttf` 字体文件
-   - 准备包含以下列的 CSV 文件：`分公司`、`投保人`、`预收规保`、`缴费期间`
+   - 准备包含以下列的 CSV 文件：`分公司`、`业务员姓名`、`预收规保`、`缴费期间`
 
 2. **上传数据**：
    - 点击上传按钮，选择你的 CSV 文件
@@ -457,7 +457,7 @@ st.markdown("""
 
 3. **数据转换规则**：
    - `分公司` → 作为城市显示
-   - `投保人` → 作为姓名显示
+   - `业务员姓名` → 作为姓名显示
    - `预收规保`（元）→ 转换为万元，小于10万元的记录会被过滤
    - `缴费期间` → 生成描述：
      - 当为 0 时，显示"喜签嘉年华趸交保单"
