@@ -212,8 +212,8 @@ with tab1:
                     df['金额'] = df['预收规保_万元'].apply(lambda x: str(int(x)))
                     df['单位'] = '万'
                     
-                    # 4. 按规保金额从小到大排序
-                    df = df.sort_values('预收规保_万元', ascending=True).reset_index(drop=True)
+                    # 4. 按规保金额从大到小排序
+                    df = df.sort_values('预收规保_万元', ascending=False).reset_index(drop=True)
         
         except Exception as e:
             st.error(f"❌ 读取 CSV 文件时出错: {str(e)}")
@@ -303,9 +303,9 @@ with tab2:
             
             if parsed_data:
                 df = pd.DataFrame(parsed_data)
-                # 按规保金额从小到大排序（将金额字符串转换为数值后排序）
+                # 按规保金额从大到小排序（将金额字符串转换为数值后排序）
                 df['金额_数值'] = pd.to_numeric(df['金额'], errors='coerce')
-                df = df.sort_values('金额_数值', ascending=True).reset_index(drop=True)
+                df = df.sort_values('金额_数值', ascending=False).reset_index(drop=True)
                 df = df.drop('金额_数值', axis=1)  # 删除临时列
                 st.success(f"✅ 成功解析 {len(df)} 条数据")
             else:
