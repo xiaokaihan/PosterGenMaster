@@ -245,7 +245,12 @@ class PosterDrawer:
             font=unit_font
         )
         
-        return img
+        # 调整海报尺寸为手机屏幕大小（1080x1920）
+        phone_width = 1080
+        phone_height = 1920
+        img_resized = img.resize((phone_width, phone_height), Image.Resampling.LANCZOS)
+        
+        return img_resized
     
     def update_config(self, **kwargs):
         """
