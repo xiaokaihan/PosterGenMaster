@@ -201,6 +201,9 @@ poster_image = drawer.draw(data_row, config)
    - 访问 [Streamlit Share](https://share.streamlit.io/user/xiaokaihan)
    - 点击 **Restart** 按钮即可完成部署
 
+   Reboot app?
+
+
 ### 其他部署方式
 
 如需其他部署方式（如 Docker、云服务器等），详细部署指南请参考 [DEPLOY.md](DEPLOY.md)。
