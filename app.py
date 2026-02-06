@@ -6,6 +6,8 @@ import streamlit as st
 import pandas as pd
 import zipfile
 import io
+import os
+from PIL import Image
 from core.drawer import PosterDrawer
 
 
@@ -26,6 +28,67 @@ if 'drawer' not in st.session_state:
         font_path='assets/NotoSansSC-Regular.ttf',
         bold_font_path='assets/NotoSansSC-Bold.ttf'
     )
+
+# 侧边栏 - 模板管理
+st.sidebar.header("🖼️ 模板管理")
+
+# 模板文件上传
+uploaded_template = st.sidebar.file_uploader(
+    "上传新的模板图片",
+    type=['jpg', 'jpeg', 'png'],
+    help="上传新的海报背景模板（建议尺寸：900x1600 或 1080x1920）"
+)
+
+if uploaded_template is not None:
+    try:
+        # 验证图片格式
+        img = Image.open(uploaded_template)
+        img_format = img.format
+        
+        # 保存模板文件
+        template_path = 'assets/template.jpg'
+        # 确保 assets 目录存在
+        os.makedirs('assets', exist_ok=True)
+        
+        # 如果是 PNG 格式，转换为 JPG
+        if img_format == 'PNG':
+            # 转换为 RGB 模式（PNG 可能是 RGBA）
+            if img.mode == 'RGBA':
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                background.paste(img, mask=img.split()[3])  # 使用 alpha 通道作为 mask
+                img = background
+            else:
+                img = img.convert('RGB')
+        
+        # 保存文件
+        img.save(template_path, 'JPEG', quality=95)
+        
+        # 重新初始化 PosterDrawer 实例以使用新模板
+        st.session_state.drawer = PosterDrawer(
+            background_path=template_path,
+            font_path='assets/NotoSansSC-Regular.ttf',
+            bold_font_path='assets/NotoSansSC-Bold.ttf'
+        )
+        
+        st.sidebar.success(f"✅ 模板已更新！\n尺寸: {img.size[0]}x{img.size[1]}")
+        
+        # 显示预览
+        st.sidebar.image(img, caption="当前模板预览", use_container_width=True)
+        
+    except Exception as e:
+        st.sidebar.error(f"❌ 上传模板失败: {str(e)}")
+else:
+    # 显示当前模板信息
+    template_path = 'assets/template.jpg'
+    if os.path.exists(template_path):
+        try:
+            current_img = Image.open(template_path)
+            st.sidebar.info(f"当前模板尺寸: {current_img.size[0]}x{current_img.size[1]}")
+            st.sidebar.image(current_img, caption="当前模板", use_container_width=True)
+        except Exception as e:
+            st.sidebar.warning(f"无法加载当前模板: {str(e)}")
+
+st.sidebar.divider()
 
 # 侧边栏 - 参数微调
 st.sidebar.header("⚙️ 参数微调")
