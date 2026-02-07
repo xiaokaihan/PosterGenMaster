@@ -9,6 +9,7 @@ import io
 import os
 from PIL import Image
 from core.drawer import PosterDrawer
+from core.template_manager import TemplateManager
 
 
 # 页面配置
@@ -21,129 +22,535 @@ st.set_page_config(
 # 页面标题
 st.title("🏆 PosterGenMaster - 自动海报生成工具")
 
+# 初始化模板管理器
+if 'template_manager' not in st.session_state:
+    st.session_state.template_manager = TemplateManager()
+
+# 初始化默认模板（如果不存在）
+if 'templates_initialized' not in st.session_state:
+    templates = st.session_state.template_manager.load_templates()
+    if not templates:
+        # 创建默认模板
+        default_template = st.session_state.template_manager.initialize_default_template()
+        st.session_state.templates_initialized = True
+    else:
+        st.session_state.templates_initialized = True
+
+# 初始化当前模板ID
+if 'current_template_id' not in st.session_state:
+    default_template = st.session_state.template_manager.get_default_template()
+    if default_template:
+        st.session_state.current_template_id = default_template['id']
+    else:
+        st.session_state.current_template_id = None
+
+# 加载当前模板
+current_template = None
+if st.session_state.current_template_id:
+    current_template = st.session_state.template_manager.get_template(st.session_state.current_template_id)
+
 # 初始化 PosterDrawer 实例
-if 'drawer' not in st.session_state:
-    st.session_state.drawer = PosterDrawer(
-        background_path='assets/template.jpg',
-        font_path='assets/NotoSansSC-Regular.ttf',
-        bold_font_path='assets/NotoSansSC-Bold.ttf'
-    )
+if 'drawer' not in st.session_state or st.session_state.get('drawer_template_id') != st.session_state.current_template_id:
+    if current_template:
+        # 获取模板背景图的完整路径
+        template_bg_path = st.session_state.template_manager.get_template_background_path(current_template)
+        if template_bg_path:
+            template_config = {
+                'background_path': template_bg_path,
+                'config': current_template.get('config', {})
+            }
+            st.session_state.drawer = PosterDrawer(
+                template_config=template_config,
+                font_path='assets/NotoSansSC-Regular.ttf',
+                bold_font_path='assets/NotoSansSC-Bold.ttf'
+            )
+            st.session_state.drawer_template_id = st.session_state.current_template_id
+        else:
+            # 降级处理：使用默认路径
+            st.session_state.drawer = PosterDrawer(
+                background_path='assets/template.jpg',
+                font_path='assets/NotoSansSC-Regular.ttf',
+                bold_font_path='assets/NotoSansSC-Bold.ttf'
+            )
+            st.session_state.drawer_template_id = None
+    else:
+        # 没有模板时使用默认路径
+        st.session_state.drawer = PosterDrawer(
+            background_path='assets/template.jpg',
+            font_path='assets/NotoSansSC-Regular.ttf',
+            bold_font_path='assets/NotoSansSC-Bold.ttf'
+        )
+        st.session_state.drawer_template_id = None
 
 # 侧边栏 - 模板管理
 st.sidebar.header("🖼️ 模板管理")
 
-# 模板文件上传
-uploaded_template = st.sidebar.file_uploader(
-    "上传新的模板图片",
-    type=['jpg', 'jpeg', 'png'],
-    help="上传新的海报背景模板（建议尺寸：900x1600 或 1080x1920）"
-)
+# 加载所有模板
+templates = st.session_state.template_manager.load_templates()
 
-if uploaded_template is not None:
+# 模板选择器
+if templates:
+    template_options = {f"{t['name']}{' (默认)' if t.get('is_default', False) else ''}": t['id'] for t in templates}
+    # 确保当前模板ID在选项列表中
+    if st.session_state.current_template_id not in template_options.values():
+        # 如果当前模板ID不在列表中（可能被删除了），切换到第一个模板
+        if templates:
+            st.session_state.current_template_id = templates[0]['id']
+            st.session_state.drawer_template_id = None  # 强制重新加载drawer
+    
+    # 计算当前选中的索引
     try:
-        # 验证图片格式
-        img = Image.open(uploaded_template)
-        img_format = img.format
-        
-        # 保存模板文件
-        template_path = 'assets/template.jpg'
-        # 确保 assets 目录存在
-        os.makedirs('assets', exist_ok=True)
-        
-        # 如果是 PNG 格式，转换为 JPG
-        if img_format == 'PNG':
-            # 转换为 RGB 模式（PNG 可能是 RGBA）
-            if img.mode == 'RGBA':
-                background = Image.new('RGB', img.size, (255, 255, 255))
-                background.paste(img, mask=img.split()[3])  # 使用 alpha 通道作为 mask
-                img = background
-            else:
-                img = img.convert('RGB')
-        
-        # 保存文件
-        img.save(template_path, 'JPEG', quality=95)
-        
-        # 重新初始化 PosterDrawer 实例以使用新模板
-        st.session_state.drawer = PosterDrawer(
-            background_path=template_path,
-            font_path='assets/NotoSansSC-Regular.ttf',
-            bold_font_path='assets/NotoSansSC-Bold.ttf'
+        current_index = list(template_options.values()).index(st.session_state.current_template_id)
+    except ValueError:
+        current_index = 0
+        if templates:
+            st.session_state.current_template_id = templates[0]['id']
+    
+    selected_template_name = st.sidebar.selectbox(
+        "选择模板",
+        options=list(template_options.keys()),
+        index=current_index,
+        key="template_selector",  # 添加key确保删除后能刷新
+        help="选择要使用的模板"
+    )
+    selected_template_id = template_options[selected_template_name]
+    
+    # 如果切换了模板，更新当前模板，并加载该模板保存的微调参数
+    if selected_template_id != st.session_state.current_template_id:
+        st.session_state.current_template_id = selected_template_id
+        current_template = st.session_state.template_manager.get_template(selected_template_id)
+        if current_template:
+            template_bg_path = st.session_state.template_manager.get_template_background_path(current_template)
+            if template_bg_path:
+                template_config = {
+                    'background_path': template_bg_path,
+                    'config': current_template.get('config', {})
+                }
+                st.session_state.drawer = PosterDrawer(
+                    template_config=template_config,
+                    font_path='assets/NotoSansSC-Regular.ttf',
+                    bold_font_path='assets/NotoSansSC-Bold.ttf'
+                )
+                st.session_state.drawer_template_id = selected_template_id
+                # 清空更新模板相关的session_state，确保显示新模板的参数
+                update_keys_to_clear = [
+                    'update_template_image',
+                    f'up_template_text_{selected_template_id}', f'up_template_text_size_{selected_template_id}', f'up_template_text_y_{selected_template_id}',
+                    f'up_size_city_{selected_template_id}', f'up_size_desc_{selected_template_id}',
+                    f'up_size_amount_{selected_template_id}', f'up_size_unit_{selected_template_id}',
+                    f'up_y_city_{selected_template_id}', f'up_y_desc_{selected_template_id}',
+                    f'up_y_amount_{selected_template_id}', f'up_offset_{selected_template_id}'
+                ]
+                for key in update_keys_to_clear:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                st.sidebar.success(f"✅ 已切换到模板: {current_template['name']}")
+                st.rerun()
+else:
+    st.sidebar.info("暂无模板，请创建第一个模板")
+
+# 模板操作区域
+st.sidebar.subheader("模板操作")
+
+def _build_config_from_params(drawer, size_adj, y_adj, unit_offset_y_val):
+    """从微调参数（调整量）构建配置"""
+    return {
+        'layers': {
+            'city_name': {
+                'color': drawer.config['layers']['city_name']['color'],
+                'size': drawer.config['layers']['city_name']['size'] + size_adj['city_name'],
+                'y': drawer.config['layers']['city_name']['y'] + y_adj['city_name'],
+                'spacing': drawer.config['layers']['city_name'].get('spacing', 35),
+                'align': 'center',
+                'bold': True
+            },
+            'desc': {
+                'color': drawer.config['layers']['desc']['color'],
+                'size': drawer.config['layers']['desc']['size'] + size_adj['desc'],
+                'y': drawer.config['layers']['desc']['y'] + y_adj['desc'],
+                'align': 'center',
+                'bold': True
+            },
+            'amount': {
+                'color': drawer.config['layers']['amount']['color'],
+                'size': drawer.config['layers']['amount']['size'] + size_adj['amount'],
+                'y': drawer.config['layers']['amount']['y'] + y_adj['amount'],
+                'align': 'center',
+                'bold': True
+            },
+            'unit': {
+                'color': drawer.config['layers']['unit']['color'],
+                'size': drawer.config['layers']['unit']['size'] + size_adj['unit'],
+                'y': drawer.config['layers']['unit']['y'],
+                'spacing_x': drawer.config['layers']['unit'].get('spacing_x', 20),
+                'spacing_y': drawer.config['layers']['unit'].get('spacing_y', 10),
+                'offset_y': unit_offset_y_val,
+                'align': 'right_bottom',
+                'bold': True
+            }
+        }
+    }
+
+def _build_config_from_values(base_config, template_text='', template_text_size=100, template_text_y=200, city_name_size=120, city_name_y=415, desc_size=50, desc_y=620, amount_size=220, amount_y=750, unit_size=80, unit_offset_y=60):
+    """从实际数值构建配置（用于更新模板时直接保存）"""
+    return {
+        'layers': {
+            'template_text': {
+                'text': template_text,
+                'color': base_config['layers'].get('template_text', {}).get('color', '#FFEDB5'),
+                'size': template_text_size,
+                'y': template_text_y,
+                'align': 'center',
+                'bold': True
+            },
+            'city_name': {
+                'color': base_config['layers']['city_name']['color'],
+                'size': city_name_size,
+                'y': city_name_y,
+                'spacing': base_config['layers']['city_name'].get('spacing', 35),
+                'align': 'center',
+                'bold': True
+            },
+            'desc': {
+                'color': base_config['layers']['desc']['color'],
+                'size': desc_size,
+                'y': desc_y,
+                'align': 'center',
+                'bold': True
+            },
+            'amount': {
+                'color': base_config['layers']['amount']['color'],
+                'size': amount_size,
+                'y': amount_y,
+                'align': 'center',
+                'bold': True
+            },
+            'unit': {
+                'color': base_config['layers']['unit']['color'],
+                'size': unit_size,
+                'y': base_config['layers']['unit']['y'],
+                'spacing_x': base_config['layers']['unit'].get('spacing_x', 20),
+                'spacing_y': base_config['layers']['unit'].get('spacing_y', 10),
+                'offset_y': unit_offset_y,
+                'align': 'right_bottom',
+                'bold': True
+            }
+        }
+    }
+
+# 创建新模板
+with st.sidebar.expander("➕ 创建新模板", expanded=False):
+    new_template_name = st.text_input("模板名称", key="new_template_name", placeholder="请输入模板名称")
+    new_template_image = st.file_uploader(
+        "上传背景图片",
+        type=['jpg', 'jpeg', 'png'],
+        key="new_template_image",
+        help="上传新的海报背景模板（建议尺寸：900x1600 或 1080x1920）"
+    )
+    
+    st.markdown("**模板固定文字**")
+    # 从当前drawer配置中获取基准值
+    drawer_layers = st.session_state.drawer.config.get('layers', {})
+    drawer_template_text = drawer_layers.get('template_text', {})
+    create_template_text = st.text_input("模板文字内容", value=drawer_template_text.get('text', ''), key="create_template_text", placeholder="如：喜签嘉年华", help="模板固定显示的文字内容")
+    col_template_text = st.columns(2)
+    with col_template_text[0]:
+        create_template_text_size = st.slider("模板文字字号", 40, 200, int(drawer_template_text.get('size', 100)), key="create_template_text_size", help=f"当前值: {drawer_template_text.get('size', 100)}")
+    with col_template_text[1]:
+        create_template_text_y = st.slider("模板文字Y", 50, 500, int(drawer_template_text.get('y', 200)), key="create_template_text_y", help=f"当前值: {drawer_template_text.get('y', 200)}")
+    
+    st.markdown("**参数微调（文字大小和位置）**")
+    drawer_city = drawer_layers.get('city_name', {})
+    drawer_desc = drawer_layers.get('desc', {})
+    drawer_amount = drawer_layers.get('amount', {})
+    drawer_unit = drawer_layers.get('unit', {})
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        create_city_name_size = st.slider("城市+姓名字号", 60, 180, int(drawer_city.get('size', 120)), key="create_city_name_size", help=f"当前值: {drawer_city.get('size', 120)}")
+        create_desc_size = st.slider("描述字号", 30, 100, int(drawer_desc.get('size', 50)), key="create_desc_size", help=f"当前值: {drawer_desc.get('size', 50)}")
+        create_amount_size = st.slider("金额字号", 120, 320, int(drawer_amount.get('size', 220)), key="create_amount_size", help=f"当前值: {drawer_amount.get('size', 220)}")
+        create_unit_size = st.slider("单位字号", 50, 120, int(drawer_unit.get('size', 80)), key="create_unit_size", help=f"当前值: {drawer_unit.get('size', 80)}")
+    with col2:
+        create_city_name_y = st.slider("城市+姓名Y", 200, 600, int(drawer_city.get('y', 415)), key="create_city_name_y", help=f"当前值: {drawer_city.get('y', 415)}")
+        create_desc_y = st.slider("描述Y", 400, 800, int(drawer_desc.get('y', 620)), key="create_desc_y", help=f"当前值: {drawer_desc.get('y', 620)}")
+        create_amount_y = st.slider("金额Y", 500, 900, int(drawer_amount.get('y', 750)), key="create_amount_y", help=f"当前值: {drawer_amount.get('y', 750)}")
+        create_unit_offset_y = st.slider("单位Y偏移", -100, 150, int(drawer_unit.get('offset_y', 60)), key="create_unit_offset_y", help=f"当前值: {drawer_unit.get('offset_y', 60)}")
+    
+    if st.button("创建模板", key="create_template_btn"):
+        if not new_template_name:
+            st.error("请输入模板名称")
+        elif not new_template_image:
+            st.error("请上传背景图片")
+        else:
+            try:
+                # 使用实际值构建配置，与更新模板保持一致
+                base_config = st.session_state.drawer.config
+                current_config = _build_config_from_values(
+                    base_config, create_template_text, create_template_text_size, create_template_text_y,
+                    create_city_name_size, create_city_name_y,
+                    create_desc_size, create_desc_y, create_amount_size, create_amount_y,
+                    create_unit_size, create_unit_offset_y
+                )
+                
+                new_template = st.session_state.template_manager.create_template(
+                    name=new_template_name,
+                    config=current_config,
+                    uploaded_file=new_template_image
+                )
+                st.success(f"✅ 模板 '{new_template_name}' 创建成功！")
+                st.session_state.current_template_id = new_template['id']
+                # 清空创建表单的所有内容
+                keys_to_clear = [
+                    'new_template_name', 'new_template_image',
+                    'create_template_text', 'create_template_text_size', 'create_template_text_y',
+                    'create_city_name_size', 'create_desc_size', 'create_amount_size', 'create_unit_size',
+                    'create_city_name_y', 'create_desc_y', 'create_amount_y', 'create_unit_offset_y'
+                ]
+                for key in keys_to_clear:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                # 重新加载模板列表和当前模板
+                current_template = st.session_state.template_manager.get_template(new_template['id'])
+                if current_template:
+                    template_bg_path = st.session_state.template_manager.get_template_background_path(current_template)
+                    if template_bg_path:
+                        template_config = {
+                            'background_path': template_bg_path,
+                            'config': current_template.get('config', {})
+                        }
+                        st.session_state.drawer = PosterDrawer(
+                            template_config=template_config,
+                            font_path='assets/NotoSansSC-Regular.ttf',
+                            bold_font_path='assets/NotoSansSC-Bold.ttf'
+                        )
+                        st.session_state.drawer_template_id = new_template['id']
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ 创建模板失败: {str(e)}")
+
+# 更新当前模板
+if current_template:
+    with st.sidebar.expander("✏️ 更新当前模板", expanded=False):
+        # 更新模板名称
+        update_template_name = st.text_input(
+            "模板名称",
+            value=current_template.get('name', ''),
+            key=f"update_template_name_{st.session_state.current_template_id}",
+            help="修改模板名称"
         )
         
-        st.sidebar.success(f"✅ 模板已更新！\n尺寸: {img.size[0]}x{img.size[1]}")
+        update_template_image = st.file_uploader(
+            "更新背景图片（可选）",
+            type=['jpg', 'jpeg', 'png'],
+            key="update_template_image",
+            help="留空则只更新配置，不更新背景图"
+        )
         
-        # 显示预览
-        st.sidebar.image(img, caption="当前模板预览", use_container_width=True)
+        st.markdown(f"**文字内容（前缀/后缀）**")
+        layers = current_template.get('config', {}).get('layers', {})
+        city_cfg = layers.get('city_name', {})
+        desc_cfg = layers.get('desc', {})
+        amount_cfg = layers.get('amount', {})
+        unit_cfg = layers.get('unit', {})
+        # 使用模板ID作为key后缀，确保切换模板时显示各自参数
+        tid = st.session_state.current_template_id
         
-    except Exception as e:
-        st.sidebar.error(f"❌ 上传模板失败: {str(e)}")
-else:
-    # 显示当前模板信息
-    template_path = 'assets/template.jpg'
-    if os.path.exists(template_path):
+        st.markdown(f"**模板固定文字**")
+        template_text_cfg = layers.get('template_text', {})
+        tid = st.session_state.current_template_id
+        update_template_text = st.text_input("模板文字内容", value=template_text_cfg.get('text', ''), key=f"up_template_text_{tid}", placeholder="如：喜签嘉年华", help="模板固定显示的文字内容")
+        col_template_text = st.columns(2)
+        with col_template_text[0]:
+            template_text_size_val = int(template_text_cfg.get('size', 100))
+            update_template_text_size = st.slider("模板文字字号", 40, 200, template_text_size_val, key=f"up_template_text_size_{tid}", help=f"当前值: {template_text_size_val}")
+        with col_template_text[1]:
+            template_text_y_val = int(template_text_cfg.get('y', 200))
+            update_template_text_y = st.slider("模板文字Y", 50, 500, template_text_y_val, key=f"up_template_text_y_{tid}", help=f"当前值: {template_text_y_val}")
+        
+        st.markdown(f"**参数微调（文字大小和位置）**")
+        # 从模板配置中读取当前值
+        city_size_val = int(city_cfg.get('size', 120))
+        city_y_val = int(city_cfg.get('y', 415))
+        desc_size_val = int(desc_cfg.get('size', 50))
+        desc_y_val = int(desc_cfg.get('y', 620))
+        amount_size_val = int(amount_cfg.get('size', 220))
+        amount_y_val = int(amount_cfg.get('y', 750))
+        unit_size_val = int(unit_cfg.get('size', 80))
+        unit_offset_val = int(unit_cfg.get('offset_y', 60))
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            update_city_name_size = st.slider("城市+姓名字号", 60, 180, city_size_val, key=f"up_size_city_{tid}", help=f"当前值: {city_size_val}")
+            update_desc_size = st.slider("描述字号", 30, 100, desc_size_val, key=f"up_size_desc_{tid}", help=f"当前值: {desc_size_val}")
+            update_amount_size = st.slider("金额字号", 120, 320, amount_size_val, key=f"up_size_amount_{tid}", help=f"当前值: {amount_size_val}")
+            update_unit_size = st.slider("单位字号", 50, 120, unit_size_val, key=f"up_size_unit_{tid}", help=f"当前值: {unit_size_val}")
+        with col2:
+            update_city_name_y = st.slider("城市+姓名Y", 200, 600, city_y_val, key=f"up_y_city_{tid}", help=f"当前值: {city_y_val}")
+            update_desc_y = st.slider("描述Y", 400, 800, desc_y_val, key=f"up_y_desc_{tid}", help=f"当前值: {desc_y_val}")
+            update_amount_y = st.slider("金额Y", 500, 900, amount_y_val, key=f"up_y_amount_{tid}", help=f"当前值: {amount_y_val}")
+            update_unit_offset_y = st.slider("单位Y偏移", -100, 150, unit_offset_val, key=f"up_offset_{tid}", help=f"当前值: {unit_offset_val}")
+        
+        if st.button("保存当前配置", key="update_template_btn"):
+            try:
+                base = current_template.get('config') or st.session_state.drawer.config
+                if 'layers' not in base:
+                    base = st.session_state.drawer.config
+                current_config = _build_config_from_values(
+                    base, update_template_text, update_template_text_size, update_template_text_y,
+                    update_city_name_size, update_city_name_y,
+                    update_desc_size, update_desc_y, update_amount_size, update_amount_y,
+                    update_unit_size, update_unit_offset_y
+                )
+                
+                update_kwargs = {'config': current_config}
+                
+                # 如果模板名称有变化，更新名称
+                if update_template_name and update_template_name.strip() != current_template.get('name', ''):
+                    update_kwargs['name'] = update_template_name.strip()
+                
+                if update_template_image:
+                    update_kwargs['uploaded_file'] = update_template_image
+                
+                updated_template = st.session_state.template_manager.update_template(
+                    st.session_state.current_template_id,
+                    **update_kwargs
+                )
+                
+                # 如果名称已更新，显示提示
+                if 'name' in update_kwargs:
+                    st.success(f"✅ 模板已更新！名称: '{updated_template['name']}'")
+                else:
+                    st.success(f"✅ 模板 '{updated_template['name']}' 已更新！")
+                
+                # 如果名称改变了，需要刷新模板选择器
+                if 'name' in update_kwargs:
+                    if 'template_selector' in st.session_state:
+                        del st.session_state['template_selector']
+                
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ 更新模板失败: {str(e)}")
+    
+    # 删除模板
+    templates_count = len(templates)
+    if not current_template.get('is_default', False):
+        if templates_count > 1:
+            # 使用确认对话框
+            if 'confirm_delete' not in st.session_state:
+                st.session_state.confirm_delete = False
+            
+            if not st.session_state.confirm_delete:
+                if st.sidebar.button("🗑️ 删除当前模板", key="delete_template_btn", type="secondary"):
+                    st.session_state.confirm_delete = True
+                    st.rerun()
+            else:
+                st.sidebar.warning(f"⚠️ 确认删除模板 '{current_template.get('name', '未知')}'？")
+                col1, col2 = st.sidebar.columns(2)
+                with col1:
+                    if st.button("✅ 确认删除", key="confirm_delete_btn", type="primary"):
+                        try:
+                            deleted_template_id = st.session_state.current_template_id
+                            deleted_template_name = current_template.get('name', '未知')
+                            
+                            # 执行删除操作
+                            result = st.session_state.template_manager.delete_template(deleted_template_id)
+                            
+                            if result:
+                                st.session_state.confirm_delete = False
+                                st.sidebar.success(f"✅ 模板 '{deleted_template_name}' 已删除")
+                                
+                                # 重新加载模板列表（确保获取最新数据）
+                                templates = st.session_state.template_manager.load_templates()
+                                
+                                # 切换到默认模板或其他模板
+                                default_template = st.session_state.template_manager.get_default_template()
+                                if default_template:
+                                    st.session_state.current_template_id = default_template['id']
+                                    # 重新加载drawer
+                                    template_bg_path = st.session_state.template_manager.get_template_background_path(default_template)
+                                    if template_bg_path:
+                                        template_config = {
+                                            'background_path': template_bg_path,
+                                            'config': default_template.get('config', {})
+                                        }
+                                        st.session_state.drawer = PosterDrawer(
+                                            template_config=template_config,
+                                            font_path='assets/NotoSansSC-Regular.ttf',
+                                            bold_font_path='assets/NotoSansSC-Bold.ttf'
+                                        )
+                                        st.session_state.drawer_template_id = default_template['id']
+                                else:
+                                    # 如果没有默认模板，选择第一个模板
+                                    remaining_templates = st.session_state.template_manager.load_templates()
+                                    if remaining_templates:
+                                        st.session_state.current_template_id = remaining_templates[0]['id']
+                                        remaining_template = remaining_templates[0]
+                                        template_bg_path = st.session_state.template_manager.get_template_background_path(remaining_template)
+                                        if template_bg_path:
+                                            template_config = {
+                                                'background_path': template_bg_path,
+                                                'config': remaining_template.get('config', {})
+                                            }
+                                            st.session_state.drawer = PosterDrawer(
+                                                template_config=template_config,
+                                                font_path='assets/NotoSansSC-Regular.ttf',
+                                                bold_font_path='assets/NotoSansSC-Bold.ttf'
+                                            )
+                                            st.session_state.drawer_template_id = remaining_template['id']
+                                    else:
+                                        st.session_state.current_template_id = None
+                                        st.session_state.drawer_template_id = None
+                                # 清空模板选择器的session_state，强制刷新
+                                if 'template_selector' in st.session_state:
+                                    del st.session_state['template_selector']
+                                st.rerun()
+                            else:
+                                st.session_state.confirm_delete = False
+                                st.sidebar.error(f"❌ 删除模板失败：未找到模板")
+                        except Exception as e:
+                            st.session_state.confirm_delete = False
+                            st.sidebar.error(f"❌ 删除模板失败: {str(e)}")
+                            import traceback
+                            st.sidebar.exception(e)
+                with col2:
+                    if st.button("❌ 取消", key="cancel_delete_btn"):
+                        st.session_state.confirm_delete = False
+                        st.rerun()
+        else:
+            st.sidebar.info("⚠️ 至少需要保留一个模板，无法删除")
+    elif current_template.get('is_default', False) and templates_count > 1:
+        st.sidebar.info("💡 提示：默认模板无法删除，请先设置其他模板为默认模板")
+    
+    # 设为默认模板
+    if not current_template.get('is_default', False):
+        if st.sidebar.button("⭐ 设为默认模板", key="set_default_template_btn"):
+            try:
+                st.session_state.template_manager.set_default_template(st.session_state.current_template_id)
+                st.sidebar.success("✅ 已设为默认模板")
+                st.rerun()
+            except Exception as e:
+                st.sidebar.error(f"❌ 设置失败: {str(e)}")
+
+# 显示当前模板预览
+if current_template:
+    template_bg_path = st.session_state.template_manager.get_template_background_path(current_template)
+    if template_bg_path and os.path.exists(template_bg_path):
         try:
-            current_img = Image.open(template_path)
-            st.sidebar.info(f"当前模板尺寸: {current_img.size[0]}x{current_img.size[1]}")
-            st.sidebar.image(current_img, caption="当前模板", use_container_width=True)
+            preview_img = Image.open(template_bg_path)
+            st.sidebar.subheader("模板预览")
+            st.sidebar.info(f"模板: {current_template['name']}\n尺寸: {preview_img.size[0]}x{preview_img.size[1]}")
+            st.sidebar.image(preview_img, caption="当前模板", use_container_width=True)
         except Exception as e:
-            st.sidebar.warning(f"无法加载当前模板: {str(e)}")
+            st.sidebar.warning(f"无法加载模板预览: {str(e)}")
 
 st.sidebar.divider()
 
-# 侧边栏 - 参数微调
-st.sidebar.header("⚙️ 参数微调")
-
-# 字体大小微调滑块
-st.sidebar.subheader("字体大小调整")
-city_name_size_adjust = st.sidebar.slider("城市+姓名字号", -20, 20, 0, help="调整城市和姓名字体大小")
-desc_size_adjust = st.sidebar.slider("描述字号", -20, 20, 0, help="调整描述字体大小")
-amount_size_adjust = st.sidebar.slider("金额字号", -50, 50, 0, help="调整金额字体大小")
-unit_size_adjust = st.sidebar.slider("单位字号", -20, 20, 0, help="调整单位字体大小")
-
-# 垂直位置微调滑块
-st.sidebar.subheader("垂直位置调整")
-city_name_y_adjust = st.sidebar.slider("城市+姓名Y坐标", -50, 50, 0, help="调整城市和姓名垂直位置")
-desc_y_adjust = st.sidebar.slider("描述Y坐标", -50, 50, 0, help="调整描述垂直位置")
-amount_y_adjust = st.sidebar.slider("金额Y坐标", -50, 50, 0, help="调整金额垂直位置")
-unit_offset_y = st.sidebar.slider("单位Y偏移", -100, 100, 60, help="调整单位垂直位置（正值往下，负值往上）")
-
-# 应用微调后的配置
-dynamic_config = {
-    'layers': {
-        'city_name': {
-            'color': st.session_state.drawer.config['layers']['city_name']['color'],
-            'size': st.session_state.drawer.config['layers']['city_name']['size'] + city_name_size_adjust,
-            'y': st.session_state.drawer.config['layers']['city_name']['y'] + city_name_y_adjust,
-            'spacing': st.session_state.drawer.config['layers']['city_name'].get('spacing', 20),
-            'align': 'center',
-            'bold': True
-        },
-        'desc': {
-            'color': st.session_state.drawer.config['layers']['desc']['color'],
-            'size': st.session_state.drawer.config['layers']['desc']['size'] + desc_size_adjust,
-            'y': st.session_state.drawer.config['layers']['desc']['y'] + desc_y_adjust,
-            'align': 'center',
-            'bold': True  # 使用粗体
-        },
-        'amount': {
-            'color': st.session_state.drawer.config['layers']['amount']['color'],
-            'size': st.session_state.drawer.config['layers']['amount']['size'] + amount_size_adjust,
-            'y': st.session_state.drawer.config['layers']['amount']['y'] + amount_y_adjust,
-            'align': 'center',
-            'bold': True
-        },
-        'unit': {
-            'color': st.session_state.drawer.config['layers']['unit']['color'],
-            'size': st.session_state.drawer.config['layers']['unit']['size'] + unit_size_adjust,
-            'y': st.session_state.drawer.config['layers']['unit']['y'],
-            'spacing_x': st.session_state.drawer.config['layers']['unit'].get('spacing_x', 20),
-            'spacing_y': st.session_state.drawer.config['layers']['unit'].get('spacing_y', 10),
-            'offset_y': unit_offset_y,  # 单位Y坐标偏移量
-            'align': 'right_bottom',
-            'bold': True
-        }
-    }
-}
+# 生成海报时使用当前模板的配置（参数微调在创建/更新模板时设置并保存）
+if current_template:
+    dynamic_config = current_template.get('config', {})
+else:
+    dynamic_config = st.session_state.drawer.config
 
 # 主区域
 st.header("📤 数据输入")
@@ -263,9 +670,9 @@ with tab1:
                     def generate_desc(row):
                         payment_period = pd.to_numeric(row['缴费期间'], errors='coerce')
                         if pd.isna(payment_period) or payment_period == 0:
-                            return "喜签嘉年华趸交保单"
+                            return "喜签趸交保单"
                         else:
-                            return f"喜签嘉年华{int(payment_period)}年期保单"
+                            return f"喜签{int(payment_period)}年期保单"
                     
                     df['描述'] = df.apply(generate_desc, axis=1)
                     
@@ -361,7 +768,7 @@ with tab2:
                         '金额': str(int(amount)),
                         '单位': '万',
                         '缴费期间': payment_period,
-                        '描述': "喜签嘉年华趸交保单" if payment_period == 0 else f"喜签嘉年华{payment_period}年期保单"
+                        '描述': "喜签趸交保单" if payment_period == 0 else f"喜签{payment_period}年期保单"
                     })
             
             if parsed_data:
@@ -530,8 +937,8 @@ st.markdown("""
    - `业务员姓名` → 作为姓名显示
    - `预收规保`（元）→ 转换为万元，小于10万元的记录会被过滤
    - `缴费期间` → 生成描述：
-     - 当为 0 时，显示"喜签嘉年华趸交保单"
-     - 当不为 0 时，显示"喜签嘉年华x 年期保单"（x 为缴费期间数字）
+     - 当为 0 时，显示"喜签趸交保单"
+     - 当不为 0 时，显示"喜签x 年期保单"（x 为缴费期间数字）
    - 金额只取整数部分，单位固定为"万"
 
 4. **调整参数**（可选）：

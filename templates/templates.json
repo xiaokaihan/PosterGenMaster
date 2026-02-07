@@ -1,0 +1,106 @@
+[
+  {
+    "id": "template_f2c41b79",
+    "name": "嘉年华",
+    "background_path": "template_f2c41b79/background.jpg",
+    "config": {
+      "layers": {
+        "template_text": {
+          "text": "喜签嘉年华",
+          "color": "#FFEDB5",
+          "size": 100,
+          "y": 200,
+          "align": "center",
+          "bold": true
+        },
+        "city_name": {
+          "color": "#FFEDB5",
+          "size": 145,
+          "y": 415,
+          "spacing": 35,
+          "align": "center",
+          "bold": true
+        },
+        "desc": {
+          "color": "#FFEDB5",
+          "size": 59,
+          "y": 620,
+          "align": "center",
+          "bold": true
+        },
+        "amount": {
+          "color": "#FFEDB5",
+          "size": 220,
+          "y": 750,
+          "align": "center",
+          "bold": true
+        },
+        "unit": {
+          "color": "#FFEDB5",
+          "size": 80,
+          "y": 750,
+          "spacing_x": 20,
+          "spacing_y": 10,
+          "offset_y": 60,
+          "align": "right_bottom",
+          "bold": true
+        }
+      }
+    },
+    "created_at": "2026-02-07T15:06:11.823893",
+    "updated_at": "2026-02-07T16:58:36.605119",
+    "is_default": true
+  },
+  {
+    "id": "8bdc4124-eff0-4227-9473-5a77bb0d7a6e",
+    "name": "开门红",
+    "background_path": "8bdc4124-eff0-4227-9473-5a77bb0d7a6e/background.jpg",
+    "config": {
+      "layers": {
+        "template_text": {
+          "text": "喜签开门红",
+          "color": "#FFEDB5",
+          "size": 100,
+          "y": 200,
+          "align": "center",
+          "bold": true
+        },
+        "city_name": {
+          "color": "#FFEDB5",
+          "size": 108,
+          "y": 415,
+          "spacing": 35,
+          "align": "center",
+          "bold": true
+        },
+        "desc": {
+          "color": "#FFEDB5",
+          "size": 59,
+          "y": 620,
+          "align": "center",
+          "bold": true
+        },
+        "amount": {
+          "color": "#FFEDB5",
+          "size": 220,
+          "y": 750,
+          "align": "center",
+          "bold": true
+        },
+        "unit": {
+          "color": "#FFEDB5",
+          "size": 80,
+          "y": 750,
+          "spacing_x": 20,
+          "spacing_y": 10,
+          "offset_y": 60,
+          "align": "right_bottom",
+          "bold": true
+        }
+      }
+    },
+    "created_at": "2026-02-07T17:00:38.524240",
+    "updated_at": "2026-02-07T17:01:55.893670",
+    "is_default": false
+  }
+]

@@ -9,23 +9,31 @@ import os
 class PosterDrawer:
     """海报绘制器类，负责在底图上绘制文字生成海报"""
     
-    def __init__(self, background_path='assets/template.jpg', font_path='assets/font.ttf', bold_font_path='assets/NotoSansSC-Bold.ttf'):
+    def __init__(self, background_path='assets/template.jpg', font_path='assets/font.ttf', bold_font_path='assets/NotoSansSC-Bold.ttf', template_config=None):
         """
         初始化海报绘制器
         
         Args:
-            background_path: 背景底图路径，默认为 'assets/template.jpg'
+            background_path: 背景底图路径，默认为 'assets/template.jpg'（如果提供 template_config 则忽略）
             font_path: 字体文件路径，默认为 'assets/font.ttf'
             bold_font_path: 粗体字体文件路径，默认为 'assets/NotoSansSC-Bold.ttf'
+            template_config: 模板配置字典（可选），包含 'background_path' 和 'config' 字段
         """
-        self.background_path = background_path
         self.font_path = font_path
         self.bold_font_path = bold_font_path
         
         # 默认配置字典 - 方便后续微调坐标和颜色
         # 整体往上移动，Y坐标都减少了
-        self.config = {
+        default_config = {
             'layers': {
+                'template_text': {  # 模板固定文字（如"喜签嘉年华"）
+                    'text': '喜签',  # 文字内容，默认为"喜签"
+                    'color': '#FFEDB5',  # 浅金色
+                    'size': 100,  # 字号
+                    'y': 200,  # Y坐标
+                    'align': 'center',
+                    'bold': True  # 使用粗体
+                },
                 'city_name': {  # 城市+姓名（同一行）
                     'color': '#FFEDB5',  # 浅金色
                     'size': 120,  # 字号+20
@@ -60,6 +68,13 @@ class PosterDrawer:
                 }
             }
         }
+        
+        # 如果提供了模板配置，使用模板配置
+        if template_config:
+            self.load_from_template(template_config)
+        else:
+            self.background_path = background_path
+            self.config = default_config
     
     def get_font(self, size, bold=False):
         """
@@ -143,6 +158,15 @@ class PosterDrawer:
         
         layers_config = config.get('layers', self.config['layers'])
         
+        # 获取模板文字内容（用于替换描述中的"喜签"）
+        template_text = '喜签'  # 默认值
+        if 'template_text' in layers_config:
+            template_text_config = layers_config['template_text']
+            template_text = template_text_config.get('text', '')
+            # 如果文字内容为空，使用默认值"喜签"
+            if not template_text:
+                template_text = '喜签'
+        
         # 1. 绘制城市+姓名（同一行，居中，粗体）
         city = str(data_row.get('城市', ''))
         name = str(data_row.get('姓名', ''))
@@ -180,6 +204,9 @@ class PosterDrawer:
         
         # 2. 绘制描述（居中）
         desc = str(data_row.get('描述', ''))
+        # 如果描述中包含"喜签"，则用模板文字内容替换
+        if '喜签' in desc:
+            desc = desc.replace('喜签', template_text)
         desc_config = layers_config['desc']
         desc_font = self.get_font(desc_config['size'], bold=desc_config.get('bold', False))
         desc_bbox = self.get_text_bbox(draw, desc, desc_font)
@@ -251,6 +278,78 @@ class PosterDrawer:
         img_resized = img.resize((phone_width, phone_height), Image.Resampling.LANCZOS)
         
         return img_resized
+    
+    def load_from_template(self, template_config):
+        """
+        从模板配置加载背景图和配置
+        
+        Args:
+            template_config: 模板配置字典，包含 'background_path' 和 'config' 字段
+        """
+        # 设置背景图路径
+        self.background_path = template_config.get('background_path', 'assets/template.jpg')
+        
+        # 加载配置，如果模板配置中有 config，则使用它，否则使用默认配置
+        template_layers = template_config.get('config', {}).get('layers', {})
+        
+        # 深度合并配置，确保所有必需的层都存在
+        default_config = {
+            'layers': {
+                'template_text': {
+                    'text': '喜签',
+                    'color': '#FFEDB5',
+                    'size': 100,
+                    'y': 200,
+                    'align': 'center',
+                    'bold': True
+                },
+                'city_name': {
+                    'color': '#FFEDB5',
+                    'size': 120,
+                    'y': 415,
+                    'spacing': 35,
+                    'align': 'center',
+                    'bold': True
+                },
+                'desc': {
+                    'color': '#FFEDB5',
+                    'size': 50,
+                    'y': 620,
+                    'align': 'center',
+                    'bold': True
+                },
+                'amount': {
+                    'color': '#FFEDB5',
+                    'size': 220,
+                    'y': 750,
+                    'align': 'center',
+                    'bold': True
+                },
+                'unit': {
+                    'color': '#FFEDB5',
+                    'size': 80,
+                    'y': 750,
+                    'spacing_x': 20,
+                    'spacing_y': 10,
+                    'offset_y': 60,
+                    'align': 'right_bottom',
+                    'bold': True
+                }
+            }
+        }
+        
+        # 合并配置
+        merged_layers = {}
+        for layer_name in ['city_name', 'desc', 'amount', 'unit']:
+            if layer_name in template_layers:
+                # 合并模板配置和默认配置
+                merged_layer = default_config['layers'][layer_name].copy()
+                merged_layer.update(template_layers[layer_name])
+                merged_layers[layer_name] = merged_layer
+            else:
+                merged_layers[layer_name] = default_config['layers'][layer_name].copy()
+        
+        self.config = {'layers': merged_layers}
     
     def update_config(self, **kwargs):
         """
